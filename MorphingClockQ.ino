@@ -302,30 +302,30 @@ byte nosee = 100;
 
 // Set weather icon position; TF_cols = 4 by default
 byte img_x = 7 * TF_COLS + 1;
-byte img_y = 2;
+byte img_y = 1;
 
 // Date position
 byte date_x = 2;
 byte date_y = 26;
 
 // Temperature position
-byte tmp_x = 12 * TF_COLS;
-byte tmp_y = 2;
+byte tmp_x = 12 * TF_COLS - 1;
+byte tmp_y = 1;
 
 // Wind position and label
 // I'm not clear on why the first position is shifted by TF_COLS wasting space
 //  byte wind_x = 1*TF_COLS;
 byte wind_x = 0;
-byte wind_y = 2;
+byte wind_y = 1;
 
 // Humidity postion and label
 byte humi_x = 0;
-byte humi_y = 2;
+byte humi_y = 1;
 char humi_label[] = "%";
 
 // Text weather condition
 byte wtext_x = 5 * TF_COLS - 3;
-byte wtext_y = 2;
+byte wtext_y = 1;
 
 String wind_lstr = "   ";
 String humi_lstr = "   ";
@@ -372,6 +372,7 @@ typedef enum e_vars {
   EV_SSID,
   EV_PASS,
   EV_TZ,
+  EV_TZ_OFFSET,
   EV_24H,
   EV_METRIC,
   EV_DATEFMT,
@@ -381,6 +382,7 @@ typedef enum e_vars {
   EV_WANI,
   EV_PALET,
   EV_BRIGHT,
+  EV_BRIGHT_NIGHT,
   EV_LONG,
   EV_LAT,
   EV_COUNTRY,
@@ -397,12 +399,14 @@ String index_html = "<!DOCTYPE html><html><body>\
 SSID:     <input type='text' name='wifi_ssid' value='%WIFI_SSID%' maxlength='50'><br>\
 Password: <input type='password' name='wifi_pass' value='%WIFI_PASS%' maxlength='50'><br><br>\
 Timezone: <input type='text' name='timezone' value='%TIMEZONE%' maxlength='3'><br>\
+Timezone Offset(minutes): <input type='text' name='timezone_offset' value='%TIMEZONE_OFFSET%' maxlength='2'><br>\
 24 Hour format: <input type='text' name='military' value='%MILITARY%'><br>\
 Date Format: <input type='text' name='date_fmt' value='%DATE_FMT%'><br>\
 Daylight Savings Time (true/false): <input type='text' name='dst_sav' value='%DST_SAV%'><br><br>\
 <p>1=Cyan, 2=Red, 3=Blue, 4=Yellow, 5=Bright Blue, 6=Orange, 7=Green</p>\
 Color Palette: <input type='number' name='c_palet' value='%C_PALET%' maxlength='3' min='1' max='7'><br>\
-Brightness: <input type='number' name='brightness' value='%BRIGHTNESS%' maxlength='2' min='20' max='70'>\
+Brightness(Day): <input type='number' name='brightness' value='%BRIGHTNESS%' maxlength='2' min='2' max='70'><br>\
+Brightness(Night): <input type='number' name='brightness_night' value='%BRIGHTNESS_NIGHT%' maxlength='2' min='2' max='70'>\
 <p>Dim the display for night time hours in 24hr format, enter 0 in both fields to disable</p>\
 Night Start: <input type='number' name='nightStart' value='%NIGHT_START%' maxlength='2' min='0' max='24'><br>\
 Night End: <input type='number' name='nightEnd' value='%NIGHT_END%' maxlength='2' min='0' max='24'><br><br>\
@@ -529,11 +533,13 @@ void handleRoot(AsyncWebServerRequest *request) {
   page.replace("%WIFI_SSID%", c_vars[EV_SSID]);
   page.replace("%WIFI_PASS%", c_vars[EV_PASS]);
   page.replace("%TIMEZONE%", c_vars[EV_TZ]);
+  page.replace("%TIMEZONE_OFFSET%", c_vars[EV_TZ_OFFSET]);
   page.replace("%MILITARY%", c_vars[EV_24H]);
   page.replace("%DATE_FMT%", c_vars[EV_DATEFMT]);
   page.replace("%DST_SAV%", c_vars[EV_DST]);
   page.replace("%C_PALET%", c_vars[EV_PALET]);
   page.replace("%BRIGHTNESS%", c_vars[EV_BRIGHT]);
+  page.replace("%BRIGHTNESS_NIGHT%", c_vars[EV_BRIGHT_NIGHT]);
   page.replace("%NIGHT_START%", c_vars[EV_NIGHTB]);
   page.replace("%NIGHT_END%", c_vars[EV_NIGHTE]);
   page.replace("%WEATHER_SERVICE%", c_vars[EV_WSERVICE]);
@@ -558,6 +564,8 @@ void handleSave(AsyncWebServerRequest *request) {
       strcpy(c_vars[EV_PASS], request->getParam(i)->value().c_str());
     } else if (request->getParam(i)->name() == "timezone") {
       strcpy(c_vars[EV_TZ], request->getParam(i)->value().c_str());
+    } else if (request->getParam(i)->name() == "timezone_offset") {
+      strcpy(c_vars[EV_TZ_OFFSET], request->getParam(i)->value().c_str());
     } else if (request->getParam(i)->name() == "military") {
         String upperTMP = request->getParam(i)->value();
         upperTMP.toUpperCase();
@@ -572,6 +580,8 @@ void handleSave(AsyncWebServerRequest *request) {
       strcpy(c_vars[EV_PALET], request->getParam(i)->value().c_str());
     } else if (request->getParam(i)->name() == "brightness") {
       strcpy(c_vars[EV_BRIGHT], request->getParam(i)->value().c_str());
+    } else if (request->getParam(i)->name() == "brightness_night") {
+      strcpy(c_vars[EV_BRIGHT_NIGHT], request->getParam(i)->value().c_str());
     } else if (request->getParam(i)->name() == "nightStart") {
       strcpy(c_vars[EV_NIGHTB], request->getParam(i)->value().c_str());
     } else if (request->getParam(i)->name() == "nightEnd") {
@@ -727,11 +737,11 @@ void display_updater() {
  if (atoi(c_vars[EV_NIGHTB]) != 0 && atoi(c_vars[EV_NIGHTE]) != 0)
   if ( atoi(c_vars[EV_NIGHTE]) < atoi(c_vars[EV_NIGHTB]) ) {
     if (hh24 >= atoi(c_vars[EV_NIGHTB]) || hh24 < atoi(c_vars[EV_NIGHTE])) {
-      x = 5;
+      x = atoi(c_vars[EV_BRIGHT_NIGHT]);
     }
   } else {
     if ( hh24 >= atoi(c_vars[EV_NIGHTB]) && hh24 < atoi(c_vars[EV_NIGHTB]) ) {
-      x = 5;
+      x = atoi(c_vars[EV_BRIGHT_NIGHT]);
     }
   }
 
@@ -848,6 +858,8 @@ void show_config_vars() {
   Serial.println(c_vars[EV_PASS]);
   Serial.print("Timezone=");
   Serial.println(c_vars[EV_TZ]);
+  Serial.print("TimezoneOffset=");
+  Serial.println(c_vars[EV_TZ_OFFSET]);
   Serial.print("Military=");
   Serial.println(c_vars[EV_24H]);
   Serial.print("Metric=");
@@ -866,6 +878,8 @@ void show_config_vars() {
   Serial.println(c_vars[EV_PALET]);
   Serial.print("Brightness=");
   Serial.println(c_vars[EV_BRIGHT]);
+  Serial.print("Brightness Night=");
+  Serial.println(c_vars[EV_BRIGHT_NIGHT]);
   Serial.print("Longitude=");
   Serial.println(c_vars[EV_LONG]);
   Serial.print("Latitude=");
@@ -889,6 +903,7 @@ void init_config_vars() {
   strcpy(c_vars[EV_SSID], wifi_ssid);
   strcpy(c_vars[EV_PASS], wifi_pass);
   strcpy(c_vars[EV_TZ], timezone);
+  strcpy(c_vars[EV_TZ_OFFSET], timezone_offset);
   strcpy(c_vars[EV_24H], military);
   strcpy(c_vars[EV_METRIC], u_metric);
   strcpy(c_vars[EV_DATEFMT], date_fmt);
@@ -898,6 +913,7 @@ void init_config_vars() {
   strcpy(c_vars[EV_WANI], w_animation);
   strcpy(c_vars[EV_PALET], c_palet);
   strcpy(c_vars[EV_BRIGHT], brightness);
+  strcpy(c_vars[EV_BRIGHT_NIGHT], brightness_night);
   strcpy(c_vars[EV_LONG], longitude);
   strcpy(c_vars[EV_LAT], latitude);
   strcpy(c_vars[EV_COUNTRY], country_code);
@@ -939,7 +955,7 @@ int connect_wifi(String n_wifi, String n_pass) {
 //SETUP BEGIN
 //
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   while (!Serial)
     delay(500);  //delay for Leonardo
     display.begin(16);
@@ -970,7 +986,7 @@ void setup() {
     Serial.println("SPIFFS Initialization...failed");
   }
 
-  String lstr = String("TIMEZONE:") + String(c_vars[EV_TZ]);
+  String lstr = String("TIMEZONE:") + String(c_vars[EV_TZ])+String(".") + String(c_vars[EV_TZ_OFFSET]);
   TFDrawText(&display, lstr, 4, 24, cc_cyan);
 
   //connect to wifi network
@@ -985,7 +1001,8 @@ void setup() {
   }
 
   TFDrawText(&display, String("WIFI CONNECTED "), 3, 10, cc_grn);
-  TFDrawText(&display, String(WiFi.localIP().toString()), 4, 17, cc_grn);
+  TFDrawText(&display, String(WiFi.localIP().toString()), 4, 17, cc_ylw);
+  delay(3000);
 
   select_palette();  
   select_weatherservice();
@@ -996,7 +1013,9 @@ void setup() {
   //start NTP
   Serial.print("TimeZone for NTP.Begin:");
   Serial.println(c_vars[EV_TZ]);
-  NTP.begin(ntpsvr, String(c_vars[EV_TZ]).toInt(), toBool(String(c_vars[EV_DST])));
+  Serial.print("offset:");
+  Serial.println(c_vars[EV_TZ_OFFSET]);
+  NTP.begin(ntpsvr, String(c_vars[EV_TZ]).toInt(), toBool(String(c_vars[EV_DST])), String(c_vars[EV_TZ_OFFSET]).toInt());
   NTP.setInterval(10);  //force rapid sync in 10sec
   //
   NTP.onNTPSyncEvent([](NTPSyncEvent_t ntpEvent) {
