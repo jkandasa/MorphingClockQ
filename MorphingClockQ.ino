@@ -364,7 +364,7 @@ int failed_connect = 0;
 
 
 //settings
-#define NVARS 19
+#define NVARS 21
 #define LVARS 50
 char c_vars[NVARS][LVARS];
 
